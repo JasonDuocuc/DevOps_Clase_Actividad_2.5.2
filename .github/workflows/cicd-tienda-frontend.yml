@@ -27,11 +27,17 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v2
 
     - name: Build & Push imagen Frontend a ECR
+      env:
+        # Armamos la URL completa del repositorio para evitar que use docker.io
+        REGISTRY: ${{ secrets.ECR_REGISTRY }}
+        REPO_NAME: ${{ secrets.ECR_REPO_URL_FRONTEND }}
       run: |
         cd frontend
-        # Usamos los secretos que ya configuraste para armar la URL
-        docker build -t ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_URL_FRONTEND }}:latest .
-        docker push ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_URL_FRONTEND }}:latest
+        # 1. Construir la imagen con el tag de AWS directamente
+        docker build -t $REGISTRY/$REPO_NAME:latest .
+        
+        # 2. Hacer el push (ahora sabe que es para ECR)
+        docker push $REGISTRY/$REPO_NAME:latest
 
     - name: Desplegar Frontend en EC2 vía SSM
       run: |
@@ -40,6 +46,7 @@ jobs:
           --document-name "AWS-RunShellScript" \
           --comment "Actualizar tienda-frontend desde ECR" \
           --parameters commands='[
+            "set -e",
             "aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}",
             "docker pull ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_URL_FRONTEND }}:latest",
             "docker stop tienda-frontend || true",
