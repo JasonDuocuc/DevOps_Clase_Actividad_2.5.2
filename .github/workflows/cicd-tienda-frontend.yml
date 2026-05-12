@@ -2,9 +2,9 @@ name: CI/CD Tienda Perritos - Frontend
 
 on:
   push:
-    branches: [ "main" ] # Tu rama principal según la captura
+    branches: [ "main" ] # Según configuración en image_18ff60.png
     paths:
-      - "frontend/**"   # Tu carpeta según la estructura
+      - "frontend/**"   # Según estructura en image_19559e.png
 
 jobs:
   build-push-deploy-frontend:
@@ -17,10 +17,11 @@ jobs:
     - name: Configurar credenciales AWS
       uses: aws-actions/configure-aws-credentials@v4
       with:
+        # Usamos los nombres exactos de tus Secrets
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-        aws-region: ${{ secrets.AWS_REGION }}
+        aws-region: ${{ secrets.AWS_REGION }} # Asegúrate que este Secret sea "us-east-1"
 
     - name: Login en Amazon ECR
       id: login-ecr
@@ -28,11 +29,12 @@ jobs:
 
     - name: Build & Push imagen Frontend a ECR
       env:
-        # Usamos los outputs del login y tus secrets
+        # Forzamos el uso del Registry que AWS nos da en el paso anterior
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        ECR_REPO: ${{ secrets.ECR_REPO_URL_FRONTEND }}
+        ECR_REPO: ${{ secrets.ECR_REPO_URL_FRONTEND }} # "tienda-frontend"
       run: |
         cd frontend
+        # Construimos con la URL completa: 243183027432.dkr.ecr.us-east-1.amazonaws.com/tienda-frontend
         docker build -t $ECR_REGISTRY/$ECR_REPO:latest .
         docker push $ECR_REGISTRY/$ECR_REPO:latest
 
@@ -43,10 +45,11 @@ jobs:
           --document-name "AWS-RunShellScript" \
           --comment "Actualizar tienda-frontend desde ECR" \
           --parameters commands='[
-            "aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}",
-            "docker pull ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_URL_FRONTEND }}:latest",
+            "set -e",
+            "aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}",
+            "docker pull ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPO_URL_FRONTEND }}:latest",
             "docker stop tienda-frontend || true",
             "docker rm tienda-frontend || true",
-            "docker run -d --name tienda-frontend -p 80:80 ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_URL_FRONTEND }}:latest"
+            "docker run -d --name tienda-frontend -p 80:80 ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPO_URL_FRONTEND }}:latest"
           ]' \
           --region "${{ secrets.AWS_REGION }}"
