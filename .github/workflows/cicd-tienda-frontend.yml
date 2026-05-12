@@ -2,9 +2,9 @@ name: CI/CD Tienda Perritos - Frontend
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main" ] # Tu rama principal según la captura
     paths:
-      - "frontend/**"
+      - "frontend/**"   # Tu carpeta según la estructura
 
 jobs:
   build-push-deploy-frontend:
@@ -28,16 +28,13 @@ jobs:
 
     - name: Build & Push imagen Frontend a ECR
       env:
-        # Armamos la URL completa del repositorio para evitar que use docker.io
-        REGISTRY: ${{ secrets.ECR_REGISTRY }}
-        REPO_NAME: ${{ secrets.ECR_REPO_URL_FRONTEND }}
+        # Usamos los outputs del login y tus secrets
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPO: ${{ secrets.ECR_REPO_URL_FRONTEND }}
       run: |
         cd frontend
-        # 1. Construir la imagen con el tag de AWS directamente
-        docker build -t $REGISTRY/$REPO_NAME:latest .
-        
-        # 2. Hacer el push (ahora sabe que es para ECR)
-        docker push $REGISTRY/$REPO_NAME:latest
+        docker build -t $ECR_REGISTRY/$ECR_REPO:latest .
+        docker push $ECR_REGISTRY/$ECR_REPO:latest
 
     - name: Desplegar Frontend en EC2 vía SSM
       run: |
@@ -46,7 +43,6 @@ jobs:
           --document-name "AWS-RunShellScript" \
           --comment "Actualizar tienda-frontend desde ECR" \
           --parameters commands='[
-            "set -e",
             "aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}",
             "docker pull ${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPO_URL_FRONTEND }}:latest",
             "docker stop tienda-frontend || true",
